@@ -1,0 +1,297 @@
+
+clc
+clear
+tic
+%lets define some constants...
+runtime1=40;
+runtime2=80;
+Rwheel=0.1;%m
+G=8;
+kv=68;%rpm/v
+kt=30/pi/kv;%Nm*A^-1
+R=0.04;%ohms
+H=24e-6;%Henries
+C=150;%Farads
+f=15000;
+M=1900;%kg
+Mm=300;%mass of the module
+Friction=300;%Newtons
+Vcap0=50;
+U0=15;
+t=f^-1;
+for U=0.01:0.01:U0/3.6
+    bestcurrent(round(U*100,0))=0;
+    efficiency(round(U*100,0))=0;
+for I=0.1:0.1:200
+energywasted=U*Friction+I^2*R;
+energyremovedfromloco=U*(Friction+I*kt*G/Rwheel);
+if 1-energywasted/energyremovedfromloco>efficiency(round(U*100,0))
+bestcurrent(round(U*100,0),2)=I;
+bestcurrent(round(U*100,0),1)=U;
+efficiency(round(U*100,0))=1-energywasted/energyremovedfromloco;
+end   
+end
+end
+fittedcurve = fit(bestcurrent(:,1),bestcurrent(:,2),'fourier4');
+
+for M=1900
+for stepspower=7.4
+
+u=0.6;%coefficient of friction
+g=9.81;
+Fmax=Mm*g*u;%the maximum force that can be applied to the rail before wheelslip occurs
+
+if Fmax/M>1.3*700/1900
+    Fmax=1.3*(7/19)*M
+end
+%some initial conditions
+%convert kmh to metres per second
+tic
+steps=10^stepspower;
+t=f^-1;
+
+steps=round(steps,-4);
+epoch=round(10^(stepspower-4.5),0);
+time1=zeros(steps,1);
+dutycycle1=zeros(steps,1);
+wmotor1=zeros(steps,1);
+Cemf1=zeros(steps,1);
+IR1=zeros(steps,1);
+VH1=zeros(steps,1);
+Twheel1=zeros(steps,1);
+I1=zeros(steps,1);
+Tmotor1=zeros(steps,1);
+Twheel=zeros(steps,1);
+F1=zeros(steps,1);
+a1=zeros(steps,1);
+U1=zeros(steps,1);
+Vcap1=zeros(steps,1);
+Energy1=zeros(steps,1);
+Rloss1=zeros(steps,1);
+KE1=zeros(steps,1);
+d1=zeros(steps,1);
+Energyrecovered1=zeros(steps,1);
+mode1=zeros(steps,1);
+efficiency1=zeros(steps,1);
+%%%{
+
+mode2=zeros(steps,1);
+time2=zeros(steps,1);
+wmotor2=zeros(steps,1);
+Cemf2=zeros(steps,1);
+Energy2=zeros(steps,1);
+dutycycle2=zeros(steps,1);
+IR2=zeros(steps,1);
+VH2=zeros(steps,1);
+I2=zeros(steps,1);
+Tmotor2=zeros(steps,1);
+Twheel2=zeros(steps,1);
+F2=zeros(steps,1);
+a2=zeros(steps,1);
+Vcap2=zeros(steps,1);
+Rloss2=zeros(steps,1);
+KE2=zeros(steps,1);
+d2=zeros(steps,1);
+U2=zeros(steps,1);
+Energyremaining2=zeros(steps,1);
+%Energy
+
+maxenergy=0;
+Distance=zeros(10,10);
+ratioofworkdonetodecreaseinPEnotefficiency=zeros(steps,1);
+dutycycle1(1)=0.85;
+changeinduty=0;
+
+            %%
+            Vcap1(1)=Vcap0;
+            Vcap1(2)=Vcap1(1);%capacitor pre charge
+            I1(1)=0;%now lets iterate
+            d1(1)=0;
+            Rloss1=0;
+            U1(1)=U0/3.6;
+            U1(2)=U1(1);
+            mode2(1:2)=1;
+            cyclenumber=1;
+            
+            Energy1(1)=0.5*M*U1(1)^2+0.5*C*Vcap0^2;
+            toc
+            timestep=runtime1/steps;
+            q=(epoch*timestep)
+            for iteration=2:steps
+                
+                time1(iteration)=(iteration-1)*timestep;
+                dutycycle1(iteration)=dutycycle1(iteration-1)+changeinduty;
+                
+                if dutycycle1(iteration)<0
+                    dutycycle1(iteration)=0;
+                end
+                if dutycycle1(iteration)>1
+                    dutycycle1(iteration)=1;
+                end
+                ontime=t*dutycycle1(iteration);
+                if time1(iteration)>cyclenumber*t
+                    cyclenumber=cyclenumber+1;
+                end
+                if U1(iteration-1)>0
+                    if (time1(iteration)-(cyclenumber-1)*t)<ontime
+                        mode1(iteration)=1;
+                    else
+                        mode1(iteration)=0;
+                    end
+                else
+                    mode1(iteration)=0;
+                end
+                
+                wmotor1(iteration)=60*G*U1(iteration-1)/(2*pi*Rwheel);%motor angular velocity in rpm
+                Cemf1(iteration)=wmotor1(iteration)/kv;
+                IR1(iteration)=I1(iteration-1)*R;
+                VH1(iteration)=Cemf1(iteration)-mode1(iteration)*Vcap1(iteration-1)-IR1(iteration);
+                I1(iteration)=I1(iteration-1)+timestep*VH1(iteration)/H;
+                Tmotor1(iteration)=I1(iteration)*kt;
+                Twheel1(iteration)=Tmotor1(iteration)*G;
+                F1(iteration)=Twheel1(iteration)/Rwheel;
+                if U1(iteration-1)>0
+                    F1(iteration)=F1(iteration)+Friction;
+                end
+                a1(iteration)=F1(iteration)/M;
+                U1(iteration)=U1(iteration-1)-a1(iteration)*timestep;
+                Vcap1(iteration)=Vcap1(iteration-1)+timestep*mode1(iteration)*I1(iteration)/C;
+                d1(iteration)=d1(iteration-1)+timestep*U1(iteration);
+                Rloss1(iteration)=Rloss1(iteration-1)+timestep*R*I1(iteration)^2;
+                KE1(iteration)=0.5*M*U1(iteration)^2;
+                Energyrecovered1(iteration)=0.5*C*(Vcap1(iteration)^2-Vcap0^2);
+                Energy1(iteration)=KE1(iteration)+0.5*C*Vcap1(iteration)^2+0.5*H*I1(iteration)^2+d1(iteration)*Friction+Rloss1(iteration);
+                %momentaryefficiency1(iteration)=(Energyrecovered1(iteration)-Energyrecovered1(iteration-1))/(KE1(iteration-1)-KE1(iteration));
+                if mod(iteration,epoch)==0
+                    Force1(iteration+1-epoch:iteration)=mean(F1(iteration+1-epoch:iteration));
+                   efficiency1(iteration+1-epoch:iteration)=(Energyrecovered1(iteration)-Energyrecovered1(iteration+1-epoch))/(KE1(iteration+1-epoch)-KE1(iteration));
+                   
+                   current1(iteration+1-epoch:iteration)=mean(I1(iteration+1-epoch:iteration));
+                  if current1(iteration)<(fittedcurve(U1(iteration))-1)
+                       if Force1(iteration)<(Fmax-50)
+                         
+                       dutycycle1(iteration)=dutycycle1(iteration)-q;
+                       end
+                   end
+                   if current1(iteration)>(fittedcurve(U1(iteration))+1)
+                       dutycycle1(iteration)=dutycycle1(iteration)+q;
+                   end
+                end
+               if mod(iteration,(steps/100))==0
+                   iteration/steps
+               end
+            end
+            toc
+            %subplot(3,3,n)
+            
+            
+            heat=max(d1)*Friction+max(Rloss1)
+            %%
+            dutycycle2=zeros(steps,1);
+            
+            timestep=runtime2/steps; 
+           Iaim=35
+              
+               
+                   dutycycle2(1)=0.1;
+            U2(1)=0;
+            Vcap2(1)=max(Vcap1);
+            Vcap2(2)=max(Vcap1);
+            I2(1)=0;
+            mode2(1:2)=1;
+            d2(1)=0;
+            Rloss2=0;
+            Energy2(1)=0.5*M*U2(1)^2+0.5*C*Vcap2(1)^2+heat;
+            cyclenumber=1;
+            dutycycle2(1)=0.05;
+            toc
+            for iteration=2:steps
+                tic
+                time2(iteration)=(iteration-1)*timestep;
+                dutycycle2(iteration)=dutycycle2(iteration-1);
+                
+                ontime=t*dutycycle2(iteration);
+                if dutycycle2(iteration)>1
+                    dutycycle2(iteration)=1;
+                end
+                if dutycycle2(iteration)<0
+                    dutycycle2(iteration)=0;
+                end
+                if time2(iteration)>cyclenumber*t
+                    cyclenumber=cyclenumber+1;
+                end
+                if Vcap2(iteration-1)>Vcap0
+                    if (time2(iteration)-(cyclenumber-1)*t)<ontime
+                        mode2(iteration)=1;
+                    else
+                        mode2(iteration)=0;
+                    end
+                else
+                    mode2(iteration)=0;
+                end
+                
+                wmotor2(iteration)=60*G*U2(iteration-1)/(2*pi*Rwheel);%motor angular velocity in rpm
+                Cemf2(iteration)=wmotor2(iteration)/kv;
+                IR2(iteration)=I2(iteration-1)*R;
+                VH2(iteration)=Cemf2(iteration)-mode2(iteration)*Vcap2(iteration-1)-IR2(iteration);
+                I2(iteration)=I2(iteration-1)+timestep*VH2(iteration)/H;
+                if I2(iteration)>0
+                    if mode2(iteration)==0
+                        I2(iteration)=0;
+                    end
+                end
+                
+                Tmotor2(iteration)=I2(iteration)*kt;
+                Twheel2(iteration)=Tmotor2(iteration)*G;
+                F2(iteration)=Twheel2(iteration)/Rwheel;
+                if U2(iteration-1)>0
+                    F2(iteration)=F2(iteration)+Friction;
+                end
+                a2(iteration)=F2(iteration)/M;
+                U2(iteration)=U2(iteration-1)-a2(iteration)*timestep;
+                Vcap2(iteration)=Vcap2(iteration-1)+timestep*mode2(iteration)*I2(iteration)/C;
+                d2(iteration)=d2(iteration-1)+timestep*U2(iteration);
+                Rloss2(iteration)=Rloss2(iteration-1)+timestep*R*I2(iteration)^2;
+                KE2(iteration)=0.5*M*U2(iteration)^2;
+                
+                Energyremaining2(iteration)=0.5*C*(Vcap2(iteration)^2-Vcap0^2);
+                Energy2(iteration)=KE2(iteration)+0.5*C*Vcap2(iteration)^2+0.5*H*I2(iteration)^2+d2(iteration)*Friction+Rloss2(iteration)+heat;
+              
+              if mod(iteration,(epoch))==0
+                                 
+                  Force2(iteration+1-epoch:iteration)=mean(F2(iteration+1-epoch:iteration));
+                   current2((iteration+1-epoch):iteration)=-mean(I2((iteration+1-epoch):iteration));
+                   
+                   if current2(iteration)>Iaim
+                       if abs(Force2(iteration))<(Fmax-50)
+                          
+                       dutycycle2(iteration)=dutycycle2(iteration-1)-q;
+                       end
+                   end
+                   if current2(iteration)<Iaim
+                       dutycycle2(iteration)=dutycycle2(iteration-1)+q;
+                   end
+                   
+              end
+                
+               if mod(iteration,(steps/100))==0
+                   (iteration/steps)+1
+               end
+               
+               ratioofworkdonetodecreaseinPEnotefficiency(iteration)=Friction*(d2(iteration)-d2(iteration-1))/(0.5*C*(Vcap2(iteration-1)^2-Vcap2(iteration)^2));
+            end
+            
+            
+           %d(round(M/100-12,0))=max(d2)
+           %Xaxis(round(M/100-12,0))=M;
+
+
+               
+end
+
+end 
+figure
+current1(length(current1):length(I1))=current1(length(current1));
+plot(time1,current1)
+hold on
+%plot(time1,fittedcurve(U1))
