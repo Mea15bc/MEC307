@@ -1,4 +1,5 @@
-
+% Author: Benjamin Cutler
+% Euler method code for the simulation of electrical energy recovery systems for the RCAS locomotive
 clc
 clear
 tic
